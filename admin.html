@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <!--
+    ╔═════════════════════════════════════════════════╗
+    ║           RISHA — admin.html                    ║
+    ║   ملف واجهة لوحة تحكم الإدارة                   ║
+    ╚═════════════════════════════════════════════════╝
+  -->
+
+  <!-- ══ Firebase SDK — يجب أن يكون أولاً ══ -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RISHA — لوحة تحكم الإدارة</title>
+
+  <link rel="stylesheet" href="style.css"/>
+
+  <style>
+    /* ══ أنماط خاصة بلوحة الإدارة ══ */
+    body { overflow: hidden; }
+
+    /* شاشة تسجيل دخول الأدمن */
+    #admin-login-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--black);
+      background-image: radial-gradient(ellipse 70% 50% at 50% 50%, rgba(201,168,76,0.07) 0%, transparent 70%);
+    }
+    .admin-login-box {
+      width: 100%;
+      max-width: 420px;
+      padding: 2.5rem;
+      background: var(--black-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-deep);
+    }
+
+    /* هيكل لوحة التحكم */
+    #admin-dashboard { height: 100vh; overflow: hidden; }
+    .admin-layout    { height: 100vh; }
+    #admin-main      { height: 100vh; overflow-y: auto; }
+
+    /* شريط التمرير */
+    #admin-main::-webkit-scrollbar       { width: 4px; }
+    #admin-main::-webkit-scrollbar-track { background: var(--black); }
+    #admin-main::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 2px; }
+
+    /* الجداول قابلة للتمرير أفقياً */
+    .table-scroll { overflow-x: auto; }
+
+    /* خلية كلمة المرور */
+    .password-cell {
+      font-family: monospace;
+      font-size: 0.82rem;
+      color: rgba(245,240,232,0.5);
+      cursor: pointer;
+      user-select: none;
+    }
+    .password-cell:hover { color: var(--gold); }
+
+    /* ══ أنماط رفع الصورة ══ */
+    .image-upload-area {
+      border: 2px dashed var(--border-bright);
+      border-radius: var(--radius-md);
+      padding: 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: var(--transition);
+      background: var(--black-4);
+      position: relative;
+    }
+    .image-upload-area:hover,
+    .image-upload-area.drag-over {
+      border-color: var(--gold);
+      background: rgba(201,168,76,0.05);
+    }
+    .image-upload-area input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .image-preview-box {
+      width: 100%;
+      max-height: 160px;
+      object-fit: contain;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      margin-top: 0.8rem;
+      display: none;
+    }
+    .upload-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .upload-hint {
+      font-size: 0.78rem;
+      color: rgba(245,240,232,0.35);
+      margin-top: 0.3rem;
+    }
+    .image-tab-btns {
+      display: flex;
+      gap: 0;
+      margin-bottom: 0.8rem;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .image-tab-btn {
+      flex: 1;
+      padding: 0.45rem 0.8rem;
+      background: var(--black-4);
+      border: none;
+      color: rgba(245,240,232,0.5);
+      cursor: pointer;
+      font-family: var(--font-arabic);
+      font-size: 0.82rem;
+      transition: var(--transition);
+    }
+    .image-tab-btn.active {
+      background: var(--gold-dark);
+      color: var(--white);
+    }
+    .image-tab-panel { display: none; }
+    .image-tab-panel.active { display: block; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════
+     شاشة تسجيل دخول الأدمن
+     ════════════════════════════════════════════════ -->
+<div id="admin-login-screen">
+  <div class="admin-login-box">
+
+    <!-- شعار ريشة -->
+    <div style="text-align:center; margin-bottom:2rem;">
+      <div style="font-family:var(--font-display); font-size:2.2rem; letter-spacing:0.2em; margin-bottom:0.3rem;"
+           class="gold-gradient">RISHA</div>
+      <div style="font-size:0.78rem; color:rgba(245,240,232,0.4); letter-spacing:0.15em;">ADMIN DASHBOARD</div>
+      <div class="divider-gold" style="margin-top:1rem;"><span>✦</span></div>
+    </div>
+
+    <!-- نموذج تسجيل الدخول -->
+    <form id="admin-login-form">
+      <div class="form-group">
+        <label class="form-label">اسم المستخدم</label>
+        <input type="text"     id="admin-user" class="form-input" placeholder="اسم المستخدم" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">كلمة المرور</label>
+        <div style="position:relative; display:flex; align-items:center; gap:0.5rem;">
+          <input type="password" id="admin-pass" class="form-input" placeholder="••••••••" required/>
+          <button type="button"
+                  onclick="
+                    const inp = document.getElementById('admin-pass');
+                    const show = inp.type === 'password';
+                    inp.type = show ? 'text' : 'password';
+                    this.textContent = show ? '🙈' : '👁';
+                  "
+                  style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:1.1rem;flex-shrink:0;">👁</button>
+        </div>
+      </div>
+      <p class="error-msg" id="admin-login-error"></p>
+      <button type="submit" class="btn btn-gold btn-full" style="margin-top:1rem;">
+        دخول لوحة التحكم ✦
+      </button>
+    </form>
+
+    <p style="text-align:center; margin-top:1.5rem;">
+      <a href="index.html" style="color:rgba(245,240,232,0.35); font-size:0.8rem; text-decoration:none;">
+        ← العودة للمتجر
+      </a>
+    </p>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════
+     لوحة تحكم الإدارة الكاملة
+     ════════════════════════════════════════════════ -->
+<div id="admin-dashboard" class="hidden">
+  <div class="admin-layout">
+
+    <!-- ════ الشريط الجانبي ════ -->
+    <aside id="admin-sidebar">
+
+      <!-- الشعار -->
+      <div class="admin-sidebar-logo">
+        <div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--gold-dark),var(--gold));
+                    display:flex;align-items:center;justify-content:center;font-family:var(--font-display);
+                    font-weight:700;color:var(--black);font-size:1rem;flex-shrink:0;">R</div>
+        <div>
+          <div class="admin-logo-text gold-gradient">RISHA</div>
+          <div class="admin-logo-sub">ADMIN PANEL</div>
+        </div>
+      </div>
+
+      <!-- روابط التنقل -->
+      <nav class="admin-nav">
+        <button class="admin-nav-item active" data-panel="overview"  onclick="showPanel('overview')">
+          <span class="nav-icon">📊</span> نظرة عامة
+        </button>
+        <button class="admin-nav-item" data-panel="orders"    onclick="showPanel('orders')">
+          <span class="nav-icon">📦</span> الطلبات
+        </button>
+        <button class="admin-nav-item" data-panel="customers" onclick="showPanel('customers')">
+          <span class="nav-icon">👥</span> الزبائن
+        </button>
+        <button class="admin-nav-item" data-panel="products"  onclick="showPanel('products')">
+          <span class="nav-icon">🪶</span> المنتجات
+        </button>
+      </nav>
+
+      <!-- أزرار الجزء السفلي -->
+      <div style="padding:1rem 1.5rem; border-top:1px solid var(--border);">
+        <a href="index.html" class="btn btn-ghost btn-sm btn-full"
+           style="margin-bottom:0.5rem; text-align:center; display:block;">
+          ← المتجر
+        </a>
+        <button id="admin-logout-btn" class="btn btn-sm btn-full"
+                style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#f87171;">
+          تسجيل الخروج
+        </button>
+        <p style="font-size:0.7rem; color:rgba(245,240,232,0.2); text-align:center; margin-top:0.8rem;">
+          © <span id="admin-year"></span> RISHA
+        </p>
+      </div>
+    </aside>
+
+    <!-- ════ المحتوى الرئيسي ════ -->
+    <main id="admin-main">
+
+      <!-- شريط العنوان العلوي -->
+      <div class="admin-topbar">
+        <div>
+          <h1 class="admin-page-title" id="admin-page-title">نظرة عامة</h1>
+          <p class="admin-page-sub"   id="admin-page-sub">إحصائيات ومؤشرات المتجر</p>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.8rem;">
+          <div style="font-size:0.8rem; color:rgba(245,240,232,0.3);">
+            <span id="current-time"></span>
+          </div>
+          <div class="badge badge-gold">Admin</div>
+        </div>
+      </div>
+
+
+      <!-- ═══════════════════════════════════════════
+           لوح النظرة العامة (Overview)
+           ═══════════════════════════════════════════ -->
+      <div class="admin-panel active" id="panel-overview">
+
+        <!-- بطاقات الإحصاءات -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">📦</div>
+            <div class="stat-value" id="stat-orders">0</div>
+            <div class="stat-label">إجمالي الطلبات</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">👥</div>
+            <div class="stat-value" id="stat-customers">0</div>
+            <div class="stat-label">الزبائن المسجلون</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🪶</div>
+            <div class="stat-value" id="stat-products">0</div>
+            <div class="stat-label">المنتجات المعروضة</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-value" id="stat-revenue" style="font-size:1.4rem;">0</div>
+            <div class="stat-label">إجمالي الإيرادات</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">⏳</div>
+            <div class="stat-value" id="stat-pending">0</div>
+            <div class="stat-label">طلبات معلقة</div>
+          </div>
+        </div>
+
+        <!-- آخر الطلبات -->
+        <div class="admin-table-wrap" style="margin-top:2rem;">
+          <div class="admin-table-header">
+            <span class="admin-table-title">🕐 آخر الطلبات الواردة</span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>رقم الطلب</th>
+                  <th>الزبون</th>
+                  <th>المنتجات</th>
+                  <th>المبلغ</th>
+                  <th>الحالة</th>
+                </tr>
+              </thead>
+              <tbody id="recent-orders-tbody">
+                <tr>
+                  <td colspan="5" style="text-align:center;color:rgba(245,240,232,0.3);padding:2rem;">
+                    لا توجد طلبات بعد
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ═══════════════════════════════════════════
+           لوح إدارة الطلبات
+           ═══════════════════════════════════════════ -->
+      <div class="admin-panel" id="panel-orders">
+        <div class="admin-table-wrap">
+          <div class="admin-table-header">
+            <span class="admin-table-title">📦 كل الطلبات</span>
+            <select id="order-filter" class="form-select btn-sm" style="min-width:160px;">
+              <option value="">كل الطلبات</option>
+              <option value="قيد المعالجة">قيد المعالجة</option>
+              <option value="تم التأكيد">تم التأكيد</option>
+              <option value="جاري التوصيل">جاري التوصيل</option>
+              <option value="تم التوصيل">تم التوصيل</option>
+              <option value="ملغي">ملغي</option>
+            </select>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>رقم الطلب</th>
+                  <th>الزبون</th>
+                  <th>المنتجات</th>
+                  <th>المبلغ</th>
+                  <th>المدينة</th>
+                  <th>الحالة</th>
+                  <th>تغيير الحالة</th>
+                </tr>
+              </thead>
+              <tbody id="orders-tbody">
+                <tr>
+                  <td colspan="7" style="text-align:center;color:rgba(245,240,232,0.3);padding:2rem;">
+                    جارٍ التحميل...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ═══════════════════════════════════════════
+           لوح إدارة الزبائن
+           ═══════════════════════════════════════════ -->
+      <div class="admin-panel" id="panel-customers">
+        <div class="admin-table-wrap">
+          <div class="admin-table-header">
+            <span class="admin-table-title">👥 قائمة الزبائن</span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>الاسم</th>
+                  <th>رقم الهاتف</th>
+                  <th>المدينة</th>
+                  <th>كلمة السر</th>
+                  <th>الطلبات</th>
+                  <th>الإنفاق الكلي</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="customers-tbody">
+                <tr>
+                  <td colspan="7" style="text-align:center;color:rgba(245,240,232,0.3);padding:2rem;">
+                    جارٍ التحميل...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ═══════════════════════════════════════════
+           لوح إدارة المنتجات
+           ═══════════════════════════════════════════ -->
+      <div class="admin-panel" id="panel-products">
+
+        <!-- نموذج إضافة / تعديل منتج -->
+        <div class="admin-form" style="margin-bottom:2rem;">
+          <h3 class="admin-form-title" id="prod-form-title">🪶 + إضافة منتج جديد</h3>
+
+          <!-- حقل مخفي يحمل معرّف المنتج أثناء التعديل -->
+          <input type="hidden" id="prod-edit-id"/>
+
+          <form id="product-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">اسم المنتج *</label>
+                <input type="text" id="prod-name" class="form-input"
+                       placeholder="ريشة الطاووس الملكية" required/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">السعر (دينار عراقي) *</label>
+                <input type="number" id="prod-price" class="form-input"
+                       placeholder="7500" min="0" required/>
+              </div>
+            </div>
+
+            <!-- ✅ قسم الصورة المحسّن: يدعم رفع الملف أو رابط URL -->
+            <div class="form-group">
+              <label class="form-label">صورة المنتج *</label>
+
+              <!-- أزرار التبديل بين طريقة الرفع -->
+              <div class="image-tab-btns">
+                <button type="button" class="image-tab-btn active" onclick="switchImageTab('upload')">
+                  📂 رفع صورة
+                </button>
+                <button type="button" class="image-tab-btn" onclick="switchImageTab('url')">
+                  🔗 رابط URL
+                </button>
+              </div>
+
+              <!-- لوح رفع الملف -->
+              <div class="image-tab-panel active" id="img-panel-upload">
+                <div class="image-upload-area" id="upload-drop-area"
+                     ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                     ondragleave="this.classList.remove('drag-over')"
+                     ondrop="handleImageDrop(event)">
+                  <input type="file" id="prod-image-file"
+                         accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.svg,.bmp,.tiff,.avif"
+                         onchange="handleImageFileSelect(this)"/>
+                  <div class="upload-icon">🖼️</div>
+                  <div style="font-size:0.9rem; color:rgba(245,240,232,0.6);">
+                    اضغط أو اسحب صورة هنا
+                  </div>
+                  <div class="upload-hint">PNG, JPG, WEBP, GIF, SVG, BMP وغيرها — بدون قيود على الصيغة</div>
+                </div>
+                <img id="prod-image-preview" class="image-preview-box" alt="معاينة الصورة"/>
+                <div id="upload-filename" style="font-size:0.75rem; color:rgba(245,240,232,0.35); margin-top:0.4rem;"></div>
+              </div>
+
+              <!-- لوح رابط URL -->
+              <div class="image-tab-panel" id="img-panel-url">
+                <input type="url" id="prod-image-url" class="form-input"
+                       placeholder="https://example.com/feather.jpg"
+                       oninput="previewImageUrl(this.value)"/>
+                <img id="prod-image-url-preview" class="image-preview-box" alt="معاينة الصورة"/>
+              </div>
+
+              <!-- حقل مخفي يحمل الـ data URL أو الـ URL النهائي -->
+              <input type="hidden" id="prod-image"/>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">الوصف</label>
+                <textarea id="prod-desc" class="form-textarea" style="min-height:70px;"
+                          placeholder="وصف مختصر للمنتج..."></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">الشارة (مثل: نادرة / جديد)</label>
+                <input type="text" id="prod-tag" class="form-input" placeholder="الأكثر مبيعاً"/>
+                <div style="margin-top:1.5rem; display:flex; gap:0.8rem; flex-wrap:wrap;">
+                  <button type="submit" class="btn btn-gold">حفظ المنتج ✦</button>
+                  <button type="button" class="btn btn-ghost" onclick="resetProductForm()">
+                    إلغاء
+                  </button>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- جدول المنتجات -->
+        <div class="admin-table-wrap">
+          <div class="admin-table-header">
+            <span class="admin-table-title">🗂 قائمة المنتجات</span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>الصورة</th>
+                  <th>اسم المنتج</th>
+                  <th>السعر</th>
+                  <th>الشارة</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="products-tbody">
+                <tr>
+                  <td colspan="5" style="text-align:center;color:rgba(245,240,232,0.3);padding:2rem;">
+                    جارٍ التحميل...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </main><!-- /admin-main -->
+  </div><!-- /admin-layout -->
+</div><!-- /admin-dashboard -->
+
+
+<!-- ════════════════════════════════════════════════
+     مودال: تعديل بيانات زبون
+     ════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="edit-customer-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">✎ تعديل بيانات الزبون</h3>
+      <button class="modal-close" onclick="closeAdminModal('edit-customer-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-cust-id"/>
+      <form id="edit-customer-form">
+        <div class="form-group">
+          <label class="form-label">الاسم الكامل *</label>
+          <input type="text" id="edit-cust-name" class="form-input" placeholder="اسم الزبون" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">رقم الهاتف *</label>
+          <input type="tel" id="edit-cust-phone" class="form-input"
+                 placeholder="07XXXXXXXXX" required style="direction:ltr; text-align:right;"/>
+          <small style="color:rgba(245,240,232,0.35); font-size:0.75rem;">يجب أن يبدأ بـ 07 ويحتوي 11 رقماً</small>
+        </div>
+        <div class="form-group">
+          <label class="form-label">المدينة *</label>
+          <select id="edit-cust-city" class="form-select">
+            <option value="">— اختر المدينة —</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">كلمة المرور *</label>
+          <div style="position:relative; display:flex; align-items:center; gap:0.5rem;">
+            <input type="password" id="edit-cust-password" class="form-input"
+                   placeholder="6 أحرف على الأقل" required/>
+            <button type="button"
+                    onclick="
+                      const inp = document.getElementById('edit-cust-password');
+                      const show = inp.type === 'password';
+                      inp.type = show ? 'text' : 'password';
+                      this.textContent = show ? '🙈' : '👁';
+                    "
+                    style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:1.1rem;">👁</button>
+          </div>
+        </div>
+        <div style="display:flex; gap:0.8rem; margin-top:1.5rem; flex-wrap:wrap;">
+          <button type="submit" class="btn btn-gold">حفظ التعديلات ✦</button>
+          <button type="button" class="btn btn-ghost" onclick="closeAdminModal('edit-customer-modal')">إلغاء</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════════════════════════════════════
+     مودال: عرض طلبات زبون محدد
+     ════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="customer-modal">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <h3 class="modal-title">
+        📋 طلبات الزبون: <span id="modal-customer-name" style="color:var(--gold);"></span>
+      </h3>
+      <button class="modal-close" onclick="closeAdminModal('customer-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-customer-stats"></div>
+      <h4 style="color:var(--gold); font-family:var(--font-elegant); margin-bottom:1rem;">تفاصيل الطلبات</h4>
+      <div id="modal-customer-orders" style="max-height:400px; overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- حاوية الإشعارات (Toasts) -->
+<div id="admin-toast"
+     style="position:fixed; bottom:2rem; right:2rem; z-index:9000;
+            display:flex; flex-direction:column; gap:0.7rem;">
+</div>
+
+
+<!-- ════════════════════════════════════════════════
+     SCRIPTS
+     ════════════════════════════════════════════════ -->
+<script src="auth.js"></script>
+<script src="admin.js"></script>
+
+<script>
+  /* ══ ساعة حية ══ */
+  function updateClock() {
+    const el = document.getElementById('current-time');
+    if (el) el.textContent = new Date().toLocaleTimeString('ar-IQ');
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  /* ══ تبديل طريقة إضافة الصورة (رفع / URL) ══ */
+  function switchImageTab(tab) {
+    document.querySelectorAll('.image-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.image-tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.image-tab-btn[onclick*="${tab}"]`).classList.add('active');
+    document.getElementById(`img-panel-${tab}`).classList.add('active');
+    document.getElementById('prod-image').value = ''; // تصفير القيمة عند التبديل
+  }
+
+  /* ══ معاينة الصورة المرفوعة ══ */
+  function handleImageFileSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    /* التحقق من أن الملف صورة — يقبل أي صيغة */
+    if (!file.type.startsWith('image/') && !isImageExtension(file.name)) {
+      alert('الملف المختار ليس صورة. يرجى اختيار ملف صورة.');
+      input.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const dataUrl = e.target.result;
+      /* حفظ الـ data URL في الحقل المخفي */
+      document.getElementById('prod-image').value = dataUrl;
+
+      /* عرض المعاينة */
+      const preview = document.getElementById('prod-image-preview');
+      preview.src = dataUrl;
+      preview.style.display = 'block';
+
+      /* عرض اسم الملف */
+      document.getElementById('upload-filename').textContent =
+        `✓ ${file.name} (${(file.size / 1024).toFixed(1)} كيلوبايت)`;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  /* ══ دعم السحب والإفلات ══ */
+  function handleImageDrop(event) {
+    event.preventDefault();
+    document.getElementById('upload-drop-area').classList.remove('drag-over');
+    const file = event.dataTransfer.files[0];
+    if (!file) return;
+
+    /* حقن الملف في الـ input ثم استدعاء المعالج */
+    const input = document.getElementById('prod-image-file');
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    handleImageFileSelect(input);
+  }
+
+  /* ══ معاينة صورة URL ══ */
+  function previewImageUrl(url) {
+    document.getElementById('prod-image').value = url;
+    const preview = document.getElementById('prod-image-url-preview');
+    if (url) {
+      preview.src = url;
+      preview.style.display = 'block';
+      preview.onerror = () => { preview.style.display = 'none'; };
+    } else {
+      preview.style.display = 'none';
+    }
+  }
+
+  /* ══ التحقق من امتداد الصورة ══ */
+  function isImageExtension(filename) {
+    const imageExts = /\.(png|jpg|jpeg|webp|gif|svg|bmp|tiff|tif|avif|ico|heic|heif)$/i;
+    return imageExts.test(filename);
+  }
+
+  /* ══ تصفير نموذج المنتج ══ */
+  function resetProductForm() {
+    document.getElementById('product-form').reset();
+    document.getElementById('prod-edit-id').value = '';
+    document.getElementById('prod-image').value = '';
+    document.getElementById('prod-form-title').textContent = '+ إضافة منتج جديد';
+    document.getElementById('prod-image-preview').style.display = 'none';
+    document.getElementById('prod-image-url-preview').style.display = 'none';
+    document.getElementById('upload-filename').textContent = '';
+  }
+</script>
+
+</body>
+</html>
